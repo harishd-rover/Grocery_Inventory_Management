@@ -71,7 +71,7 @@ function App() {
         </div>
       </main>
       {showModal === 'product' && <ProductModal close={() => setShowModal(null)} onSaved={() => { setShowModal(null); loadData() }} />}
-      {showModal === 'purchase' && <PurchaseModal products={products} close={() => setShowModal(null)} onSaved={() => { setShowModal(null); loadData() }} />}
+      {showModal === 'purchase' && <PurchaseModal products={products} suppliers={suppliers} close={() => setShowModal(null)} onSaved={() => { setShowModal(null); loadData() }} />}
       {showModal === 'supplier' && <SupplierModal close={() => setShowModal(null)} onSaved={() => { setShowModal(null); loadData() }} />}
       {loading && <div className="loading-bar" />}
     </div>
@@ -118,10 +118,10 @@ function Reports({ products, summary }) {
   return <section className="report-grid"><div className="panel report-card"><p className="eyebrow">Stock report</p><h2>Inventory health</h2><div className="report-number">{summary?.products || 0}<small>products tracked</small></div><div className="report-line"><span>Healthy stock</span><strong>{products.filter((product) => product.quantity > product.reorder_level).length}</strong></div><div className="report-line"><span>Needs reorder</span><strong className="warning-text">{products.filter((product) => product.quantity <= product.reorder_level).length}</strong></div></div><div className="panel report-card"><p className="eyebrow">Category report</p><h2>Products by category</h2>{categories.map((category) => <div className="category-report" key={category}><span>{category}</span><div><i style={{ width: `${products.filter((product) => product.category === category).length / products.length * 100}%` }} /></div><strong>{products.filter((product) => product.category === category).length}</strong></div>)}</div></section>
 }
 
-function PurchaseModal({ products, close, onSaved }) {
+function PurchaseModal({ products, suppliers, close, onSaved }) {
   const [form, setForm] = useState({ supplier: '', product_id: products[0]?.id || '', quantity: 1 })
   const submit = async (event) => { event.preventDefault(); await fetch(`${API}/purchases`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, product_id: Number(form.product_id), quantity: Number(form.quantity) }) }); onSaved() }
-  return <FormModal title="Record a purchase" close={close}><form onSubmit={submit}><label>Supplier<input required value={form.supplier} onChange={(event) => setForm({ ...form, supplier: event.target.value })} placeholder="Supplier name" /></label><label>Product<select value={form.product_id} onChange={(event) => setForm({ ...form, product_id: event.target.value })}>{products.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}</select></label><label>Quantity<input required type="number" min="1" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></label><ModalActions close={close} label="Save purchase" /></form></FormModal>
+  return <FormModal title="Record a purchase" close={close}><form onSubmit={submit}><label>Supplier<select required value={form.supplier} onChange={(event) => setForm({ ...form, supplier: event.target.value })}><option value="">Select a supplier</option>{suppliers.map((supplier) => <option value={supplier.name} key={supplier.id}>{supplier.name}</option>)}</select></label><label>Product<select value={form.product_id} onChange={(event) => setForm({ ...form, product_id: event.target.value })}>{products.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}</select></label><label>Quantity<input required type="number" min="1" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></label><ModalActions close={close} label="Save purchase" /></form></FormModal>
 }
 
 function SupplierModal({ close, onSaved }) {
