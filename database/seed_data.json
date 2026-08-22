@@ -1,0 +1,22 @@
+{
+  "categories": ["Produce", "Dairy", "Pantry", "Beverages", "Snacks"],
+  "products": [
+    {"id": 1, "sku": "PRD-1001", "name": "Organic Bananas", "category": "Produce", "price": 2.49, "quantity": 42, "reorder_level": 20, "unit": "bunch", "supplier": "Fresh Farms"},
+    {"id": 2, "sku": "PRD-1002", "name": "Whole Milk", "category": "Dairy", "price": 3.89, "quantity": 8, "reorder_level": 15, "unit": "gallon", "supplier": "Meadow Dairy"},
+    {"id": 3, "sku": "PRD-1003", "name": "Sourdough Bread", "category": "Pantry", "price": 4.99, "quantity": 24, "reorder_level": 10, "unit": "loaf", "supplier": "Daily Bread Co."},
+    {"id": 4, "sku": "PRD-1004", "name": "Sparkling Water", "category": "Beverages", "price": 5.49, "quantity": 6, "reorder_level": 12, "unit": "pack", "supplier": "Clear Springs"},
+    {"id": 5, "sku": "PRD-1005", "name": "Avocado", "category": "Produce", "price": 1.29, "quantity": 56, "reorder_level": 18, "unit": "piece", "supplier": "Fresh Farms"},
+    {"id": 6, "sku": "PRD-1006", "name": "Granola Clusters", "category": "Snacks", "price": 6.79, "quantity": 19, "reorder_level": 10, "unit": "box", "supplier": "Good Grains"}
+  ],
+  "suppliers": [
+    {"id": 1, "name": "Fresh Farms", "contact": "+1 (555) 014-2088", "products": 2, "status": "Active"},
+    {"id": 2, "name": "Meadow Dairy", "contact": "+1 (555) 014-7712", "products": 1, "status": "Active"},
+    {"id": 3, "name": "Daily Bread Co.", "contact": "+1 (555) 014-3321", "products": 1, "status": "Active"},
+    {"id": 4, "name": "Clear Springs", "contact": "+1 (555) 014-9044", "products": 1, "status": "Active"}
+  ],
+  "purchases": [
+    {"id": "PO-24018", "supplier": "Fresh Farms", "product": "Organic Bananas", "items": 3, "total": 428.4, "date": "2024-06-24", "status": "Received"},
+    {"id": "PO-24017", "supplier": "Meadow Dairy", "product": "Whole Milk", "items": 2, "total": 196.5, "date": "2024-06-23", "status": "Received"},
+    {"id": "PO-24016", "supplier": "Good Grains", "product": "Granola Clusters", "items": 4, "total": 310.2, "date": "2024-06-21", "status": "Pending"}
+  ]
+}
