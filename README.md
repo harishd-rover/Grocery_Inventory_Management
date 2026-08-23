@@ -4,11 +4,11 @@ A React and Flask inventory workspace for managing grocery items, suppliers, sto
 
 ## Requirements
 
-- Python 3.9 or newer with `pip`
-- Node.js 18 or newer with `npm`
+- Python 3.9 or newer with `pip` for the Flask backend
+- Node.js 18 or newer with `npm` for the React/Vite frontend
 - A terminal such as PowerShell, Command Prompt, or Bash
 
-Check the installed versions:
+Check the installed versions before setup:
 
 ```powershell
 python --version
@@ -16,6 +16,15 @@ pip --version
 node --version
 npm --version
 ```
+
+Minimum supported versions:
+
+| Tool | Version |
+| --- | --- |
+| Python | 3.9 or newer |
+| pip | Included with Python 3.9 or newer |
+| Node.js | 18 or newer |
+| npm | Included with Node.js 18 or newer |
 
 ## Project structure
 
@@ -69,6 +78,20 @@ npm run dev
 
 Open the local URL printed by Vite, usually `http://localhost:5173`.
 
+## Authentication and roles
+
+The frontend starts with a login screen. The backend uses bearer tokens to protect the application API.
+
+**Development-only demo accounts:**
+
+| Username | Password | Role |
+| --- | --- | --- |
+| `nishi` | `admin` | Administrator |
+| `hari` | `12345` | Staff member |
+| `abhi` | `12345` | Staff member |
+
+Staff can view inventory, suppliers, purchases, reports, and create sales or purchases. Administrators can also add or update products, add suppliers, manage workspace settings, and access team controls. Authorization is enforced by the backend, so hiding a frontend control does not grant additional access.
+
 ## API overview
 
 The backend exposes these routes:
@@ -76,11 +99,18 @@ The backend exposes these routes:
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/health` | Check API status and storage mode |
+| `POST` | `/api/auth/login` | Sign in and receive an access token |
+| `GET` | `/api/auth/me` | Get the signed-in user |
+| `GET` | `/api/users` | List users (admin only) |
+| `POST` | `/api/users` | Create a user (admin only) |
+| `PATCH` | `/api/users/<id>` | Update a user or role (admin only) |
+| `DELETE` | `/api/users/<id>` | Delete a user (admin only) |
 | `GET` | `/api/summary` | Dashboard summary values |
 | `GET` | `/api/products` | List products |
 | `POST` | `/api/products` | Add a product |
 | `PATCH` | `/api/products/<id>` | Update a product |
 | `POST` | `/api/sales` | Create a sale and reduce stock |
+| `GET` | `/api/sales` | List billing invoices |
 | `GET` | `/api/suppliers` | List suppliers |
 | `POST` | `/api/suppliers` | Add a supplier |
 | `GET` | `/api/purchases` | List purchases |
@@ -89,7 +119,7 @@ The backend exposes these routes:
 
 ## Data and persistence
 
-Starter records are stored in `database/seed_data.json`. Flask loads this file into memory when the backend starts. Changes made through the API are lost when the backend restarts, and the seed file is not modified. Persistent storage is intentionally kept behind the API boundary for a future MySQL migration.
+The backend starts with empty categories, products, suppliers, purchases, and sales. Only the in-memory user accounts are initialized. Changes made through the API are lost when the backend restarts. `database/seed_data.json` is retained as reference data but is not loaded at startup. Persistent storage is intentionally kept behind the API boundary for a future MySQL migration.
 
 ## Frontend commands
 
