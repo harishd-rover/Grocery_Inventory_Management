@@ -1,11 +1,11 @@
 # Grocery Inventory Management
 
-A React and Flask inventory workspace for managing grocery items, suppliers, stock, purchases, billing, and reports.
+A standalone HTML, CSS, vanilla JavaScript, and Flask inventory workspace for managing grocery items, suppliers, stock, purchases, billing, and reports.
 
 ## Requirements
 
 - Python 3.9 or newer with `pip` for the Flask backend
-- Node.js 18 or newer with `npm` for the React/Vite frontend
+- Node.js 18 or newer with `npm` for the Vite frontend
 - A terminal such as PowerShell, Command Prompt, or Bash
 
 Check the installed versions before setup:
@@ -31,7 +31,7 @@ Minimum supported versions:
 ```text
 backend/     Flask REST API
 database/    JSON seed data
-frontend/    Vite and React application
+frontend/    Vite-powered HTML, CSS, and vanilla JavaScript application
 ```
 
 ## Setup and run locally
