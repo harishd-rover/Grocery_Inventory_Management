@@ -131,6 +131,14 @@ npm run build     # Create a production build
 npm run preview   # Preview the production build locally
 ```
 
+## Standalone animated login
+
+The project also includes a standalone login page at `frontend/login.html` with its styles and behavior in `frontend/css/login.css` and `frontend/js/login.js`. Vite serves it at `http://localhost:5173/login.html`. On successful authentication it stores the bearer token and redirects to `/`, the existing dashboard.
+
+### Current authentication
+
+MySQL integration is paused for now. Authentication currently uses the Flask in-memory user repository and Werkzeug password hashes. The browser sends JSON credentials to `POST /api/auth/login`; Flask verifies the hash, returns a bearer token, and the frontend sends that token with later dashboard requests. MySQL can be added later behind the same API boundary.
+
 ## Troubleshooting
 
 - If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process Bypass` for the current terminal, then activate `.venv` again.
