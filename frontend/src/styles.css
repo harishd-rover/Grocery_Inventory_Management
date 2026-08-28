@@ -1,3 +1,6 @@
+/* GROCERIX logo sizing for the dashboard header and sidebar. */
+.brand img{display:block;width:29px;height:29px}.brand{letter-spacing:.4px}.brand-mark{display:none}
+.brand > span{font-size:24px;letter-spacing:.8px}
 /* Login background color refinement. */
 .auth-shell{background:#f4f1e8}
 .auth-showcase{background:linear-gradient(135deg,#dbe9dc 0%,#f3e8c9 52%,#d7e9eb 100%)}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 150" role="img" aria-labelledby="title desc">
+  <title id="title">GROCERIX</title>
+  <desc id="desc">GROCERIX Smart Grocery Inventory Management logo.</desc>
+  <rect x="8" y="8" width="134" height="134" rx="34" fill="#287354"/>
+  <path d="M47 61h56l-5 45H52l-5-45Z" fill="#fff" opacity=".96"/>
+  <path d="M58 61c0-13 7-22 16-22s16 9 16 22" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+  <path d="M61 77h17c-8 0-14 5-14 12s6 12 14 12h10V89H78" fill="none" stroke="#287354" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M91 82v19M99 75v26" stroke="#d3a036" stroke-width="5" stroke-linecap="round"/>
+  <path d="M83 49c7-11 18-11 23-8-2 10-11 16-23 8Z" fill="#d3a036"/>
+  <text x="166" y="78" fill="#24382f" font-family="Manrope, sans-serif" font-size="42" font-weight="800" letter-spacing="1">GROCERIX</text>
+  <text x="169" y="111" fill="#74847a" font-family="DM Sans, sans-serif" font-size="16" font-weight="600" letter-spacing="1">SMART GROCERY INVENTORY MANAGEMENT</text>
+</svg>

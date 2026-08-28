@@ -16,7 +16,7 @@ function readUser() { try { return JSON.parse(localStorage.getItem('grocery_user
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character])) }
 function apiFetch(path, options = {}) { const token = localStorage.getItem('grocery_token') || sessionStorage.getItem('grocery_token'); const headers = { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) }; if (token) headers.Authorization = `Bearer ${token}`; return fetch(`${API}${path}`, { ...options, headers }).then((response) => { if (response.status === 401) logout(); return response }) }
 async function apiJson(path, options) { const response = await apiFetch(path, options); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Unable to load data'); return data }
-function brand() { return '<div class="brand"><span class="brand-mark">g</span><span>grocerly<span class="brand-dot">.</span></span></div>' }
+function brand() { return '<div class="brand"><img src="/assets/grocerix-mark.svg" alt=""><span>GROCERIX</span></div>' }
 function button(label, action, className = 'primary-button') { return `<button class="${className}" data-action="${action}">${label}</button>` }
 
 function render() { root.innerHTML = state.user ? renderApp() : renderLogin(); bindEvents() }
@@ -46,4 +46,5 @@ function logout() { localStorage.removeItem('grocery_token'); localStorage.remov
 function download(records, filename) { const csv = records.map((record) => Object.values(record).join(',')).join('\n'); const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); link.download = filename; link.click(); URL.revokeObjectURL(link.href) }
 window.addEventListener('auth-expired', logout)
 render()
+if (!state.user && window.location.pathname === '/' && !window.location.search.includes('dashboard=1')) window.location.replace('/login.html')
 if (state.user) loadData().catch(() => { state.loading = false; render() })

@@ -71,7 +71,7 @@ form.addEventListener('submit', async (event) => {
     loginButton.classList.add('success')
     loginButton.querySelector('.button-label').textContent = 'Success'
     setMessage('Login successful. Opening your dashboard.', 'success')
-    window.setTimeout(() => { window.location.href = '/' }, 650)
+    window.setTimeout(() => { window.location.href = '/?dashboard=1' }, 650)
   } catch (error) {
     setLoading(false)
     setMessage(error.message)
