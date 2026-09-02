@@ -1,0 +1,4 @@
+export function renderUsers(state, helpers) {
+  const { dateSort, escapeHtml } = helpers;
+  return `<section class="panel section-panel"><div class="panel-heading"><div><p class="eyebrow">Administration</p><h2>User access</h2></div><span class="alert-count">${state.users.length} users</span></div><div class="table-wrap"><table><thead><tr><th>User</th><th>Username</th><th>Role</th><th></th></tr></thead><tbody>${dateSort(state.users).map((user) => `<tr><td><strong>${escapeHtml(user.name)}</strong></td><td>${escapeHtml(user.username)}</td><td><span class="status ${user.role === 'admin' ? '' : 'pending'}">${user.role === 'admin' ? 'Administrator' : 'Staff'}</span></td><td><button class="text-button" data-edit-user="${user.id}">Edit</button><button class="text-button danger-button" data-delete-user="${user.id}" ${user.id === state.user.id ? 'disabled' : ''}>Delete</button></td></tr>`).join('')}</tbody></table></div></section>`;
+}

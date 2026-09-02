@@ -1,11 +1,12 @@
 # Grocery Inventory Management
 
-A React and Flask inventory workspace for managing grocery items, suppliers, stock, purchases, billing, and reports.
+A JavaScript, Flask, and MySQL inventory workspace for managing grocery items, suppliers, stock, purchases, billing, and reports.
 
 ## Requirements
 
 - Python 3.9 or newer with `pip` for the Flask backend
-- Node.js 18 or newer with `npm` for the React/Vite frontend
+- Node.js 18 or newer with `npm` for the Vite frontend
+- MySQL 8.0 or newer
 - A terminal such as PowerShell, Command Prompt, or Bash
 
 Check the installed versions before setup:
@@ -30,8 +31,8 @@ Minimum supported versions:
 
 ```text
 backend/     Flask REST API
-database/    JSON seed data
-frontend/    Vite and React application
+database/    MySQL schema, seed data, and setup scripts
+frontend/    Vite and JavaScript application
 ```
 
 ## Setup and run locally
@@ -45,6 +46,8 @@ cd backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+$env:MYSQL_PASSWORD = "admin123"
+$env:MYSQL_POOL_SIZE = "10"
 python app.py
 ```
 
@@ -56,17 +59,35 @@ On Command Prompt, activate the virtual environment with:
 
 The API runs at `http://localhost:5000`. Verify that it is available by opening:
 
-
-http://localhost:5000/api/health
-```
+`http://localhost:5000/api/health`
 
 The expected response is:
 
 ```json
-{"status":"ok","storage":"in-memory"}
+{"status":"ok","storage":"mysql"}
 ```
 
-### 2. Start the frontend
+### 2. Create and seed the MySQL database
+
+Connect to MySQL as `root` with password `admin123`, then run the SQL files in this order from a MySQL client such as MySQL Workbench:
+
+```sql
+SOURCE database/create_database.sql;
+SOURCE database/schema.sql;
+SOURCE database/seed.sql;
+```
+
+The scripts create the `grocery_inventory` database, create all required tables, and insert initial demo data. The backend defaults to these local MySQL settings:
+
+| Setting | Value |
+| --- | --- |
+| Host | `127.0.0.1` |
+| Port | `3306` |
+| User | `root` |
+| Password | `admin123` |
+| Database | `grocery_inventory` |
+
+### 3. Start the frontend
 
 In a second terminal:
 
@@ -87,8 +108,6 @@ The frontend starts with a login screen. The backend uses bearer tokens to prote
 | Username | Password | Role |
 | --- | --- | --- |
 | `nishi` | `admin` | Administrator |
-| `hari` | `12345` | Staff member |
-| `abhi` | `12345` | Staff member |
 
 Staff can view inventory, suppliers, purchases, reports, and create sales or purchases. Administrators can also add or update products, add suppliers, manage workspace settings, and access team controls. Authorization is enforced by the backend, so hiding a frontend control does not grant additional access.
 
@@ -119,7 +138,7 @@ The backend exposes these routes:
 
 ## Data and persistence
 
-The backend starts with empty categories, products, suppliers, purchases, and sales. Only the in-memory user accounts are initialized. Changes made through the API are lost when the backend restarts. `database/seed_data.json` is retained as reference data but is not loaded at startup. Persistent storage is intentionally kept behind the API boundary for a future MySQL migration.
+The backend uses MySQL for users, categories, products, suppliers, purchases, and sales. Changes made through the API persist across backend restarts. `database/seed_data.json` is retained as reference data; use `database/seed.sql` for the active MySQL seed data.
 
 ## Frontend commands
 

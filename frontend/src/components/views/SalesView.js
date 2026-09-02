@@ -1,0 +1,4 @@
+export function renderSales(state, helpers) {
+  const { dateSort, money, dateLabel, escapeHtml, todayTotal } = helpers;
+  return `<section class="panel section-panel"><div class="panel-heading"><div><p class="eyebrow">Billing history</p><h2>Sales invoices</h2><p class="daily-total">Total sales today: <strong>${money(todayTotal(state.sales))}</strong></p></div><span class="alert-count">${state.sales.length} invoices</span></div><div class="table-wrap"><table><thead><tr><th>Invoice</th><th>Product</th><th>Quantity</th><th>Total</th><th>Date</th></tr></thead><tbody>${dateSort(state.sales).map((sale) => `<tr><td><strong>${sale.id}</strong></td><td>${escapeHtml(sale.product || 'Multiple products')}</td><td>${sale.items || sale.quantity}</td><td><strong class="total-value">${money(sale.total)}</strong></td><td>${dateLabel(sale.date)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty-table">No invoices yet</td></tr>'}</tbody></table></div></section>`;
+}

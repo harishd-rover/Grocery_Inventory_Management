@@ -4,31 +4,18 @@ from secrets import token_urlsafe
 
 from flask import Flask, g, jsonify, request
 from flask_cors import CORS
+from mysql.connector import Error
 from werkzeug.security import check_password_hash, generate_password_hash
+
+from db import connection
 
 app = Flask(__name__)
 CORS(app)
+active_tokens = {}
 
-categories = []
-products = []
-suppliers = []
-purchases = []
-sales = []
 
 def utc_now():
-    return datetime.now(timezone.utc).isoformat()
-
-
-for records in (products, suppliers, purchases):
-    for record in records:
-        record.setdefault("date_added", f"{record.get('date', '2024-06-01')}T00:00:00+00:00")
-
-users = {
-    "hari": {"id": 1, "name": "Harish D", "role": "staff", "date_added": "2024-06-01T00:00:00+00:00", "password": generate_password_hash("12345")},
-    "nishi": {"id": 2, "name": "Nishitha Shetty", "role": "admin", "date_added": "2024-06-02T00:00:00+00:00", "password": generate_password_hash("admin")},
-    "abhi": {"id": 3, "name": "Abhi", "role": "staff", "date_added": "2024-06-03T00:00:00+00:00", "password": generate_password_hash("12345")},
-}
-active_tokens = {}
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def require_auth(roles=None):
@@ -45,23 +32,46 @@ def require_auth(roles=None):
                 return jsonify({"error": "Admin access required"}), 403
             g.current_user = user
             return view(*args, **kwargs)
-
         return wrapped_view
-
     return decorator
+
+
+def public_user(user):
+    return {"id": user["id"], "name": user["name"], "username": user["username"], "role": user["role"], "date_added": user["date_added"].isoformat() if hasattr(user["date_added"], "isoformat") else user["date_added"]}
+
+
+def product_row(row):
+    return {**row, "price": float(row["price"]), "supplier": row["supplier"] or "Unassigned", "date_added": row["date_added"].isoformat()}
+
+
+def supplier_row(row):
+    return {"id": row["id"], "name": row["name"], "contact": row["contact"], "products": row["products"], "status": row["status"], "date_added": row["date_added"].isoformat()}
+
+
+def purchase_row(row):
+    return {"id": row["reference"], "supplier": row["supplier"], "product": row["product"], "items": row["items"], "total": float(row["total"]), "date": row["purchase_date"].isoformat(), "date_added": row["date_added"].isoformat(), "status": row["status"]}
+
+
+def sale_row(row):
+    return {"id": row["reference"], "items": row["items"], "products": row["products"], "total": float(row["total"]), "date": row["sale_date"].isoformat(), "date_added": row["date_added"].isoformat()}
 
 
 @app.post("/api/auth/login")
 def login():
     payload = request.get_json() or {}
     username = payload.get("username", "").strip().lower()
-    user = users.get(username)
-    if not user or not check_password_hash(user["password"], payload.get("password", "")):
+    try:
+        with connection() as (_, cursor):
+            cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+            user = cursor.fetchone()
+    except Error:
+        return jsonify({"error": "Database unavailable"}), 503
+    if not user or not check_password_hash(user["password_hash"], payload.get("password", "")):
         return jsonify({"error": "Invalid username or password"}), 401
+    details = public_user(user)
     token = token_urlsafe(32)
-    user_details = {"id": user["id"], "name": user["name"], "username": username, "role": user["role"]}
-    active_tokens[token] = user_details
-    return jsonify({"token": token, "user": user_details})
+    active_tokens[token] = details
+    return jsonify({"token": token, "user": details})
 
 
 @app.get("/api/auth/me")
@@ -70,110 +80,116 @@ def current_user():
     return jsonify(g.current_user)
 
 
-def public_user(user, username=None):
-    return {"id": user["id"], "name": user["name"], "username": username or user["username"], "role": user["role"], "date_added": user["date_added"]}
-
-
-def find_user(user_id):
-    return next(((username, user) for username, user in users.items() if user["id"] == user_id), (None, None))
-
-
 @app.get("/api/users")
 @require_auth({"admin"})
 def get_users():
-    return jsonify([public_user(user, username) for username, user in users.items()])
+    with connection() as (_, cursor):
+        cursor.execute("SELECT * FROM users ORDER BY date_added DESC, id DESC")
+        return jsonify([public_user(user) for user in cursor.fetchall()])
 
 
 @app.post("/api/users")
 @require_auth({"admin"})
 def add_user():
     payload = request.get_json() or {}
-    username = payload.get("username", "").strip().lower()
-    name = payload.get("name", "").strip()
-    password = payload.get("password", "")
-    role = payload.get("role", "staff").strip().lower()
+    username = str(payload.get("username") or "").strip().lower()
+    name = str(payload.get("name") or "").strip()
+    password = payload.get("password") or ""
+    role = str(payload.get("role") or "staff").strip().lower()
     if not name or not username or not password:
         return jsonify({"error": "name, username and password are required"}), 400
     if role not in {"admin", "staff"}:
         return jsonify({"error": "role must be admin or staff"}), 400
-    if username in users:
-        return jsonify({"error": "Username already exists"}), 409
-    user = {"id": max(item["id"] for item in users.values()) + 1, "name": name, "username": username, "role": role, "date_added": utc_now(), "password": generate_password_hash(password)}
-    users[username] = user
-    return jsonify(public_user(user)), 201
+    try:
+        with connection() as (_, cursor):
+            cursor.execute("INSERT INTO users (name, username, password_hash, role) VALUES (%s, %s, %s, %s)", (name, username, generate_password_hash(password), role))
+            cursor.execute("SELECT * FROM users WHERE id = %s", (cursor.lastrowid,))
+            return jsonify(public_user(cursor.fetchone())), 201
+    except Error as error:
+        if getattr(error, "errno", None) == 1062:
+            return jsonify({"error": "Username already exists"}), 409
+        return jsonify({"error": "Unable to create user"}), 400
 
 
 @app.patch("/api/users/<int:user_id>")
 @require_auth({"admin"})
 def update_user(user_id):
-    current_username, user = find_user(user_id)
-    if not user:
-        return jsonify({"error": "User not found"}), 404
     payload = request.get_json() or {}
-    username = payload.get("username", current_username).strip().lower()
-    name = payload.get("name", user["name"]).strip()
-    role = payload.get("role", user["role"]).strip().lower()
-    if not name or not username:
-        return jsonify({"error": "name and username are required"}), 400
-    if role not in {"admin", "staff"}:
-        return jsonify({"error": "role must be admin or staff"}), 400
-    if username != current_username and username in users:
-        return jsonify({"error": "Username already exists"}), 409
-    if user["role"] == "admin" and role != "admin" and sum(item["role"] == "admin" for item in users.values()) == 1:
-        return jsonify({"error": "At least one admin account is required"}), 400
-    user.update({"name": name, "username": username, "role": role})
-    if payload.get("password"):
-        user["password"] = generate_password_hash(payload["password"])
-    if username != current_username:
-        del users[current_username]
-        users[username] = user
+    with connection() as (_, cursor):
+        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        username = str(payload.get("username", user["username"]) or "").strip().lower()
+        name = str(payload.get("name", user["name"]) or "").strip()
+        role = str(payload.get("role", user["role"]) or "").strip().lower()
+        if not name or not username or role not in {"admin", "staff"}:
+            return jsonify({"error": "Valid name, username and role are required"}), 400
+        if user["role"] == "admin" and role != "admin":
+            cursor.execute("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'")
+            if cursor.fetchone()["count"] == 1:
+                return jsonify({"error": "At least one admin account is required"}), 400
+        fields = ["name = %s", "username = %s", "role = %s"]
+        values = [name, username, role]
+        if payload.get("password"):
+            fields.append("password_hash = %s")
+            values.append(generate_password_hash(payload["password"]))
+        values.append(user_id)
+        try:
+            cursor.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = %s", values)
+        except Error as error:
+            if getattr(error, "errno", None) == 1062:
+                return jsonify({"error": "Username already exists"}), 409
+            raise
+        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        updated = public_user(cursor.fetchone())
     for token_user in active_tokens.values():
         if token_user["id"] == user_id:
-            token_user.update(public_user(user))
-    return jsonify(public_user(user))
+            token_user.update(updated)
+    return jsonify(updated)
 
 
 @app.delete("/api/users/<int:user_id>")
 @require_auth({"admin"})
 def delete_user(user_id):
-    username, user = find_user(user_id)
-    if not user:
-        return jsonify({"error": "User not found"}), 404
     if user_id == g.current_user["id"]:
         return jsonify({"error": "You cannot delete your own account"}), 400
-    if user["role"] == "admin" and sum(item["role"] == "admin" for item in users.values()) == 1:
-        return jsonify({"error": "At least one admin account is required"}), 400
-    del users[username]
-    for token in [token for token, token_user in active_tokens.items() if token_user["id"] == user_id]:
-        del active_tokens[token]
+    with connection() as (_, cursor):
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        if user["role"] == "admin":
+            cursor.execute("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'")
+            if cursor.fetchone()["count"] == 1:
+                return jsonify({"error": "At least one admin account is required"}), 400
+        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
     return jsonify({"message": "User deleted"})
+
 
 @app.get("/api/summary")
 @require_auth()
 def summary():
-    today = date.today().isoformat()
-    todays_sales = [sale for sale in sales if sale.get("date") == today]
-    todays_purchases = [purchase for purchase in purchases if purchase.get("date") == today]
-    sales_total = sum(sale.get("total", 0) for sale in todays_sales)
-    purchases_total = sum(purchase.get("total", 0) for purchase in todays_purchases)
-    return jsonify({
-        "products": len(products),
-        "inventory_units": sum(item.get("quantity", 0) for item in products),
-        "inventory_value": round(sum(item["price"] * item["quantity"] for item in products), 2),
-        "low_stock": sum(item["quantity"] <= item["reorder_level"] for item in products),
-        "suppliers": len(suppliers),
-        "sales_today": round(sales_total, 2),
-        "orders_today": len(todays_sales),
-        "purchases_today": round(purchases_total, 2),
-        "purchase_orders_today": len(todays_purchases),
-        "profit_today": round(sales_total - purchases_total, 2),
-        "sales_change": 0,
-    })
+    with connection() as (_, cursor):
+        cursor.execute("SELECT COUNT(*) AS products, COALESCE(SUM(quantity), 0) AS inventory_units, COALESCE(SUM(price * quantity), 0) AS inventory_value, COALESCE(SUM(quantity <= reorder_level), 0) AS low_stock FROM products")
+        result = cursor.fetchone()
+        cursor.execute("SELECT COUNT(*) AS count FROM suppliers")
+        supplier_count = cursor.fetchone()["count"]
+        cursor.execute("SELECT COALESCE(SUM(total), 0) AS total, COUNT(*) AS count FROM sales WHERE sale_date = CURDATE()")
+        sales_today = cursor.fetchone()
+        cursor.execute("SELECT COALESCE(SUM(total), 0) AS total, COUNT(*) AS count FROM purchases WHERE purchase_date = CURDATE()")
+        purchases_today = cursor.fetchone()
+    sales_total, purchase_total = float(sales_today["total"]), float(purchases_today["total"])
+    return jsonify({"products": result["products"], "inventory_units": result["inventory_units"], "inventory_value": float(result["inventory_value"]), "low_stock": result["low_stock"], "suppliers": supplier_count, "sales_today": sales_total, "orders_today": sales_today["count"], "purchases_today": purchase_total, "purchase_orders_today": purchases_today["count"], "profit_today": sales_total - purchase_total, "sales_change": 0})
+
 
 @app.get("/api/products")
 @require_auth()
 def get_products():
-    return jsonify(products)
+    with connection() as (_, cursor):
+        cursor.execute("SELECT p.*, s.name AS supplier FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id ORDER BY p.date_added DESC, p.id DESC")
+        return jsonify([product_row(row) for row in cursor.fetchall()])
+
 
 @app.post("/api/products")
 @require_auth({"admin"})
@@ -182,146 +198,178 @@ def add_product():
     required = ["name", "category", "unit", "price", "quantity"]
     if any(field not in payload for field in required):
         return jsonify({"error": "name, category, unit, price and quantity are required"}), 400
-    supplier_name = payload.get("supplier") or "Unassigned"
-    if supplier_name != "Unassigned" and not any(item["name"] == supplier_name for item in suppliers):
-        return jsonify({"error": "Selected supplier was not found"}), 400
-    new_product = {"id": max((item["id"] for item in products), default=0) + 1, "sku": f"PRD-{1000 + len(products) + 1}", "unit": "unit", "supplier": supplier_name, "reorder_level": 10, "date_added": utc_now(), **payload}
-    new_product["supplier"] = supplier_name
-    products.append(new_product)
-    if supplier_name != "Unassigned":
-        supplier = next(item for item in suppliers if item["name"] == supplier_name)
-        supplier["products"] += 1
-    return jsonify(new_product), 201
+    with connection() as (_, cursor):
+        cursor.execute("SELECT id FROM categories WHERE name = %s", (payload["category"],))
+        category = cursor.fetchone()
+        if not category:
+            cursor.execute("INSERT INTO categories (name) VALUES (%s)", (payload["category"],))
+            category_id = cursor.lastrowid
+        else:
+            category_id = category["id"]
+        supplier_id = None
+        if payload.get("supplier"):
+            cursor.execute("SELECT id FROM suppliers WHERE name = %s", (payload["supplier"],))
+            supplier = cursor.fetchone()
+            if not supplier:
+                return jsonify({"error": "Selected supplier was not found"}), 400
+            supplier_id = supplier["id"]
+        cursor.execute("SELECT COALESCE(MAX(id), 0) + 1 AS id FROM products")
+        product_id = cursor.fetchone()["id"]
+        sku = f"PRD-{1000 + product_id}"
+        cursor.execute("INSERT INTO products (sku, name, category_id, price, quantity, reorder_level, unit, supplier_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (sku, payload["name"], category_id, payload["price"], payload["quantity"], payload.get("reorder_level", 10), payload["unit"], supplier_id))
+        cursor.execute("SELECT p.*, s.name AS supplier FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE p.id = %s", (cursor.lastrowid,))
+        return jsonify(product_row(cursor.fetchone())), 201
+
 
 @app.patch("/api/products/<int:product_id>")
 @require_auth({"admin"})
 def update_product(product_id):
-    product = next((item for item in products if item["id"] == product_id), None)
-    if not product:
-        return jsonify({"error": "Product not found"}), 404
-    product.update(request.get_json() or {})
-    return jsonify(product)
-
-@app.post("/api/sales")
-@require_auth({"admin", "staff"})
-def create_sale():
     payload = request.get_json() or {}
-    sale_items = payload.get("items")
-    if sale_items is None and "product_id" in payload:
-        sale_items = [{"product_id": payload["product_id"], "quantity": payload.get("quantity", 1)}]
-    if not isinstance(sale_items, list) or not sale_items:
-        return jsonify({"error": "At least one product item is required"}), 400
-    validated_items = []
-    for item in sale_items:
-        product = next((record for record in products if record["id"] == int(item.get("product_id"))), None)
-        quantity = int(item.get("quantity", 0))
-        if not product:
+    allowed = {key: payload[key] for key in ("name", "price", "quantity", "reorder_level", "unit") if key in payload}
+    if not allowed:
+        return jsonify({"error": "No product fields supplied"}), 400
+    with connection() as (_, cursor):
+        cursor.execute(f"UPDATE products SET {', '.join(f'{key} = %s' for key in allowed)} WHERE id = %s", [*allowed.values(), product_id])
+        if cursor.rowcount == 0:
             return jsonify({"error": "Product not found"}), 404
-        if quantity < 1 or product["quantity"] < quantity:
-            return jsonify({"error": f"Not enough stock available for {product['name']}"}), 400
-        validated_items.append({"product": product, "quantity": quantity})
-    for item in validated_items:
-        item["product"]["quantity"] -= item["quantity"]
-    sale = {"id": f"INV-{1000 + len(sales) + 1}", "items": sum(item["quantity"] for item in validated_items), "products": [{"product_id": item["product"]["id"], "product": item["product"]["name"], "quantity": item["quantity"], "unit_price": item["product"]["price"]} for item in validated_items], "total": round(sum(item["product"]["price"] * item["quantity"] for item in validated_items), 2), "date": date.today().isoformat(), "date_added": utc_now()}
-    sales.append(sale)
-    return jsonify(sale), 201
+        cursor.execute("SELECT p.*, s.name AS supplier FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE p.id = %s", (product_id,))
+        return jsonify(product_row(cursor.fetchone()))
 
-@app.get("/api/sales")
-@require_auth({"admin"})
-def get_sales():
-    return jsonify(sales)
 
 @app.get("/api/suppliers")
 @require_auth()
 def get_suppliers():
-    return jsonify(suppliers)
+    with connection() as (_, cursor):
+        cursor.execute("SELECT s.*, COUNT(sp.product_id) AS products FROM suppliers s LEFT JOIN supplier_products sp ON s.id = sp.supplier_id GROUP BY s.id ORDER BY s.date_added DESC, s.id DESC")
+        return jsonify([supplier_row(row) for row in cursor.fetchall()])
 
-@app.get("/api/purchases")
-@require_auth()
-def get_purchases():
-    return jsonify(purchases)
-
-@app.post("/api/purchases")
-@require_auth({"admin", "staff"})
-def add_purchase():
-    payload = request.get_json() or {}
-    if "items" in payload:
-        purchase_items = payload["items"]
-    elif "product_id" in payload and "quantity" in payload:
-        purchase_items = [{"product_id": payload["product_id"], "quantity": payload["quantity"]}]
-    else:
-        return jsonify({"error": "supplier and at least one product item are required"}), 400
-    if not payload.get("supplier") or not isinstance(purchase_items, list) or not purchase_items:
-        return jsonify({"error": "supplier and at least one product item are required"}), 400
-    supplier_record = next((item for item in suppliers if item["name"] == payload["supplier"]), None)
-    if not supplier_record:
-        return jsonify({"error": "Supplier not found"}), 404
-    validated_items = []
-    for item in purchase_items:
-        product = next((record for record in products if record["id"] == int(item.get("product_id"))), None)
-        if not product:
-            return jsonify({"error": "Product not found"}), 404
-        if product["supplier"] != payload["supplier"]:
-            return jsonify({"error": f"{product['name']} is not supplied by this supplier"}), 400
-        supplier_quantity = supplier_record.get("supply_quantities", {}).get(str(product["id"]))
-        supplier_price = supplier_record.get("supply_prices", {}).get(str(product["id"]))
-        quantity = int(item.get("quantity", 0))
-        if supplier_quantity is None or supplier_price is None:
-            return jsonify({"error": f"Supplier quantity and price are not configured for {product['name']}"}), 400
-        if quantity < 1 or quantity > int(supplier_quantity):
-            return jsonify({"error": f"Quantity for {product['name']} must be between 1 and {supplier_quantity}"}), 400
-        validated_items.append({"product": product, "quantity": quantity, "supplier_quantity": int(supplier_quantity), "supplier_unit_price": supplier_price})
-    for item in validated_items:
-        item["product"]["quantity"] += item["quantity"]
-        supplier_record["supply_quantities"][str(item["product"]["id"])] = item["supplier_quantity"] - item["quantity"]
-    purchase = {"id": f"PO-{24019 + len(purchases)}", "supplier": payload["supplier"], "items": sum(item["quantity"] for item in validated_items), "products": [{"product_id": item["product"]["id"], "product": item["product"]["name"], "quantity": item["quantity"], "supplier_quantity": item["supplier_quantity"] - item["quantity"], "supplier_quantity_purchased": item["quantity"], "supplier_unit_price": item["supplier_unit_price"]} for item in validated_items], "total": round(sum(item["supplier_unit_price"] * item["quantity"] for item in validated_items), 2), "date": date.today().isoformat(), "date_added": utc_now(), "status": "Received"}
-    purchases.insert(0, purchase)
-    return jsonify(purchase), 201
-
-@app.get("/api/categories")
-@require_auth()
-def get_categories():
-    return jsonify(categories)
 
 @app.post("/api/suppliers")
 @require_auth({"admin"})
 def add_supplier():
     payload = request.get_json() or {}
+    product_ids, quantities, prices = payload.get("product_ids", []), payload.get("supply_quantities", {}), payload.get("supply_prices", {})
     if not payload.get("name") or not payload.get("contact"):
         return jsonify({"error": "name and contact are required"}), 400
-    product_ids = payload.get("product_ids", [])
-    supply_quantities = payload.get("supply_quantities", {})
-    supply_prices = payload.get("supply_prices", {})
-    if not isinstance(product_ids, list):
-        return jsonify({"error": "product_ids must be a list"}), 400
-    if not isinstance(supply_quantities, dict):
-        return jsonify({"error": "supply_quantities must be an object"}), 400
-    if not isinstance(supply_prices, dict):
-        return jsonify({"error": "supply_prices must be an object"}), 400
-    selected_products = [product for product in products if product["id"] in product_ids]
-    if len(selected_products) != len(set(product_ids)):
-        return jsonify({"error": "One or more selected products were not found"}), 400
-    try:
-        normalized_quantities = {str(product_id): int(supply_quantities[str(product_id)]) for product_id in product_ids}
-    except (KeyError, TypeError, ValueError):
-        return jsonify({"error": "Each selected product needs a valid supply quantity"}), 400
-    if any(quantity < 1 for quantity in normalized_quantities.values()):
-        return jsonify({"error": "Supply quantities must be at least 1"}), 400
-    try:
-        normalized_prices = {str(product_id): float(supply_prices[str(product_id)]) for product_id in product_ids}
-    except (KeyError, TypeError, ValueError):
-        return jsonify({"error": "Each selected product needs a valid supplier unit price"}), 400
-    if any(price < 0 for price in normalized_prices.values()):
-        return jsonify({"error": "Supplier unit prices cannot be negative"}), 400
-    supplier = {"id": max((item["id"] for item in suppliers), default=0) + 1, "name": payload["name"], "contact": payload["contact"], "products": len(selected_products), "supply_quantities": normalized_quantities, "supply_prices": normalized_prices, "status": "Active", "date_added": utc_now()}
-    for product in selected_products:
-        product["supplier"] = supplier["name"]
-    suppliers.append(supplier)
-    return jsonify(supplier), 201
+    if not product_ids:
+        return jsonify({"error": "Select at least one product"}), 400
+    with connection() as (_, cursor):
+        cursor.execute("INSERT INTO suppliers (name, contact) VALUES (%s, %s)", (payload["name"], payload["contact"]))
+        supplier_id = cursor.lastrowid
+        for product_id in product_ids:
+            try:
+                quantity, price = int(quantities[str(product_id)]), float(prices[str(product_id)])
+            except (KeyError, TypeError, ValueError):
+                return jsonify({"error": "Each selected product needs a valid supply quantity and price"}), 400
+            if quantity < 1 or price < 0:
+                return jsonify({"error": "Supply quantity must be at least 1 and price cannot be negative"}), 400
+            cursor.execute("INSERT INTO supplier_products (supplier_id, product_id, supply_quantity, supply_price) VALUES (%s, %s, %s, %s)", (supplier_id, product_id, quantity, price))
+            cursor.execute("UPDATE products SET supplier_id = %s WHERE id = %s", (supplier_id, product_id))
+        cursor.execute("SELECT s.*, COUNT(sp.product_id) AS products FROM suppliers s LEFT JOIN supplier_products sp ON s.id = sp.supplier_id WHERE s.id = %s GROUP BY s.id", (supplier_id,))
+        return jsonify(supplier_row(cursor.fetchone())), 201
+
+
+@app.get("/api/purchases")
+@require_auth()
+def get_purchases():
+    with connection() as (_, cursor):
+        cursor.execute("SELECT pu.*, s.name AS supplier, GROUP_CONCAT(p.name SEPARATOR ', ') AS product, SUM(pi.quantity) AS items FROM purchases pu JOIN suppliers s ON pu.supplier_id = s.id JOIN purchase_items pi ON pu.id = pi.purchase_id JOIN products p ON pi.product_id = p.id GROUP BY pu.id ORDER BY pu.purchase_date DESC, pu.id DESC")
+        return jsonify([purchase_row(row) for row in cursor.fetchall()])
+
+
+@app.post("/api/purchases")
+@require_auth({"admin", "staff"})
+def add_purchase():
+    payload = request.get_json() or {}
+    items = payload.get("items") or ([{"product_id": payload.get("product_id"), "quantity": payload.get("quantity")}] if payload.get("product_id") else [])
+    if not payload.get("supplier") or not items:
+        return jsonify({"error": "supplier and at least one product item are required"}), 400
+    with connection() as (_, cursor):
+        cursor.execute("SELECT * FROM suppliers WHERE name = %s", (payload["supplier"],))
+        supplier = cursor.fetchone()
+        if not supplier:
+            return jsonify({"error": "Supplier not found"}), 404
+        validated, total = [], 0
+        for item in items:
+            cursor.execute("SELECT p.*, sp.supply_quantity, sp.supply_price FROM products p JOIN supplier_products sp ON p.id = sp.product_id WHERE p.id = %s AND sp.supplier_id = %s FOR UPDATE", (int(item["product_id"]), supplier["id"]))
+            product = cursor.fetchone()
+            quantity = int(item.get("quantity", 0))
+            if not product:
+                return jsonify({"error": "Product is not supplied by this supplier"}), 400
+            if quantity < 1 or quantity > product["supply_quantity"]:
+                return jsonify({"error": f"Quantity for {product['name']} must be between 1 and {product['supply_quantity']}"}), 400
+            validated.append((product, quantity))
+            total += float(product["supply_price"]) * quantity
+        cursor.execute("SELECT COALESCE(MAX(id), 0) + 1 AS id FROM purchases")
+        reference = f"PO-{24019 + cursor.fetchone()['id'] - 1}"
+        cursor.execute("INSERT INTO purchases (reference, supplier_id, total, purchase_date, status) VALUES (%s, %s, %s, %s, 'Received')", (reference, supplier["id"], total, date.today()))
+        purchase_id = cursor.lastrowid
+        for product, quantity in validated:
+            cursor.execute("INSERT INTO purchase_items (purchase_id, product_id, quantity, supplier_unit_price) VALUES (%s, %s, %s, %s)", (purchase_id, product["id"], quantity, product["supply_price"]))
+            cursor.execute("UPDATE products SET quantity = quantity + %s WHERE id = %s", (quantity, product["id"]))
+            cursor.execute("UPDATE supplier_products SET supply_quantity = supply_quantity - %s WHERE supplier_id = %s AND product_id = %s", (quantity, supplier["id"], product["id"]))
+        return jsonify({"id": reference, "supplier": supplier["name"], "items": sum(quantity for _, quantity in validated), "total": round(total, 2), "date": date.today().isoformat(), "status": "Received"}), 201
+
+
+@app.get("/api/sales")
+@require_auth({"admin"})
+def get_sales():
+    with connection() as (_, cursor):
+        cursor.execute("SELECT sa.*, SUM(si.quantity) AS items FROM sales sa JOIN sale_items si ON sa.id = si.sale_id GROUP BY sa.id ORDER BY sa.sale_date DESC, sa.id DESC")
+        sales = []
+        for row in cursor.fetchall():
+            cursor.execute("SELECT si.product_id, p.name AS product, si.quantity, si.unit_price FROM sale_items si JOIN products p ON si.product_id = p.id WHERE si.sale_id = %s", (row["id"],))
+            row["products"] = cursor.fetchall()
+            sales.append(sale_row(row))
+        return jsonify(sales)
+
+
+@app.post("/api/sales")
+@require_auth({"admin", "staff"})
+def create_sale():
+    payload = request.get_json() or {}
+    items = payload.get("items") or ([{"product_id": payload.get("product_id"), "quantity": payload.get("quantity", 1)}] if payload.get("product_id") else [])
+    if not items:
+        return jsonify({"error": "At least one product item is required"}), 400
+    with connection() as (_, cursor):
+        validated, total = [], 0
+        for item in items:
+            cursor.execute("SELECT * FROM products WHERE id = %s FOR UPDATE", (int(item["product_id"]),))
+            product, quantity = cursor.fetchone(), int(item.get("quantity", 0))
+            if not product:
+                return jsonify({"error": "Product not found"}), 404
+            if quantity < 1 or product["quantity"] < quantity:
+                return jsonify({"error": f"Not enough stock available for {product['name']}"}), 400
+            validated.append((product, quantity))
+            total += float(product["price"]) * quantity
+        cursor.execute("SELECT COALESCE(MAX(id), 0) + 1 AS id FROM sales")
+        reference = f"INV-{1000 + cursor.fetchone()['id']}"
+        cursor.execute("INSERT INTO sales (reference, total, sale_date) VALUES (%s, %s, %s)", (reference, total, date.today()))
+        sale_id = cursor.lastrowid
+        for product, quantity in validated:
+            cursor.execute("INSERT INTO sale_items (sale_id, product_id, quantity, unit_price) VALUES (%s, %s, %s, %s)", (sale_id, product["id"], quantity, product["price"]))
+            cursor.execute("UPDATE products SET quantity = quantity - %s WHERE id = %s", (quantity, product["id"]))
+        return jsonify({"id": reference, "items": sum(quantity for _, quantity in validated), "total": round(total, 2), "date": date.today().isoformat()}), 201
+
+
+@app.get("/api/categories")
+@require_auth()
+def get_categories():
+    with connection() as (_, cursor):
+        cursor.execute("SELECT name FROM categories ORDER BY name")
+        return jsonify([row["name"] for row in cursor.fetchall()])
+
 
 @app.get("/api/health")
 def health():
-    return jsonify({"status": "ok", "storage": "in-memory"})
+    try:
+        with connection() as (_, cursor):
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        return jsonify({"status": "ok", "storage": "mysql"})
+    except Error:
+        return jsonify({"status": "error", "storage": "mysql"}), 503
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
