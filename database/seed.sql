@@ -39,8 +39,8 @@ SELECT pu.id, p.id, 3, 1.80
 FROM purchases pu CROSS JOIN products p
 WHERE pu.reference = 'PO-24018' AND p.sku = 'PRD-1001';
 
-INSERT INTO sales (reference, total, sale_date)
-VALUES ('INV-1001', 2.49, '2024-06-24');
+INSERT INTO sales (reference, customer_name, customer_contact, total, sale_date)
+VALUES ('INV-1001', 'Walk-in Customer', '0000000000', 2.49, '2024-06-24');
 
 INSERT INTO sale_items (sale_id, product_id, quantity, unit_price)
 SELECT s.id, p.id, 1, 2.49

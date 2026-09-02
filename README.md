@@ -77,6 +77,7 @@ SOURCE database/schema.sql;
 SOURCE database/seed.sql;
 ```
 
+
 The scripts create the `grocery_inventory` database, create all required tables, and insert initial demo data. The backend defaults to these local MySQL settings:
 
 | Setting | Value |

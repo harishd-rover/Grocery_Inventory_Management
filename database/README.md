@@ -14,6 +14,7 @@ SOURCE database/schema.sql;
 SOURCE database/seed.sql;
 ```
 
+
 Run those commands from the repository root, or use absolute paths in the MySQL client.
 
 3. Configure the backend before starting Flask. PowerShell example:

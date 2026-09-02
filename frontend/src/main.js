@@ -1,6 +1,7 @@
 import { renderApp as renderAppView } from './components/AppLayout.js';
 import { renderLogin as renderLoginView } from './components/views/LoginView.js';
 import { renderModal as renderModalView } from './components/modals/ModalView.js';
+import QRCode from 'qrcode';
 
 import './styles.css';
 
@@ -45,6 +46,8 @@ const state = {
   modal: null,
   loading: false,
   billing: {},
+  billingOrder: [],
+  billingCustomer: { name: '', contact: '' },
 };
 
 const money = (value) =>
@@ -126,6 +129,7 @@ const viewHelpers = {
 function render() {
   root.innerHTML = state.user ? renderAppView(state, viewHelpers) : renderLoginView(state, viewHelpers);
   bindEvents();
+  if (state.user && state.page === 'Billing') renderPaymentQr();
 }
 
 function bindEvents() {
@@ -137,17 +141,20 @@ function bindEvents() {
     });
   });
 
-  root.addEventListener('click', (event) => {
-    const actionElement = event.target.closest('[data-action]');
-    if (!actionElement) return;
+  if (!root.dataset.eventsBound) {
+    root.addEventListener('click', (event) => {
+      const actionElement = event.target.closest('[data-action]');
+      if (!actionElement) return;
 
-    if (actionElement.dataset.action === 'close-modal') {
-      const clickedInsideModal = event.target.closest('.modal');
-      if (clickedInsideModal && !event.target.closest('button[data-action="close-modal"]')) return;
-    }
+      if (actionElement.dataset.action === 'close-modal') {
+        const clickedInsideModal = event.target.closest('.modal');
+        if (clickedInsideModal && !event.target.closest('button[data-action="close-modal"]')) return;
+      }
 
-    handleAction(actionElement.dataset.action);
-  });
+      handleAction(actionElement.dataset.action);
+    });
+    root.dataset.eventsBound = 'true';
+  }
 
   const search = root.querySelector('[data-search]');
   if (search) {
@@ -159,9 +166,34 @@ function bindEvents() {
 
   root.querySelectorAll('[data-billing-id]').forEach((input) => {
     input.addEventListener('change', () => {
-      if (input.checked) state.billing[input.dataset.billingId] = 1;
-      else delete state.billing[input.dataset.billingId];
+      state.billing[input.dataset.billingId] = 1;
+      if (!state.billingOrder.includes(Number(input.dataset.billingId))) state.billingOrder.unshift(Number(input.dataset.billingId));
       render();
+    });
+  });
+
+  const productEntry = root.querySelector('[data-billing-product-entry]');
+  const quantityEntry = root.querySelector('[data-billing-entry-quantity]');
+  productEntry?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      selectBillingProduct(productEntry.value);
+    }
+  });
+  productEntry?.addEventListener('input', () => renderBillingSuggestions(productEntry.value));
+  productEntry?.addEventListener('focus', () => renderBillingSuggestions(productEntry.value));
+  quantityEntry?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addBillingItem(productEntry?.value, quantityEntry.value);
+    }
+  });
+
+  root.querySelectorAll('[data-billing-suggestion]').forEach((suggestion) => {
+    suggestion.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      productEntry.value = suggestion.dataset.billingSuggestion;
+      addBillingItem(productEntry.value, quantityEntry?.value);
     });
   });
 
@@ -169,7 +201,31 @@ function bindEvents() {
     input.addEventListener('input', () => {
       state.billing[input.dataset.billingQuantity] = input.value;
     });
+    input.addEventListener('blur', () => updateBillingSummary(input.dataset.billingQuantity));
   });
+
+  root.querySelectorAll('[data-remove-billing]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const productId = Number(button.dataset.removeBilling);
+      delete state.billing[productId];
+      state.billingOrder = state.billingOrder.filter((id) => id !== productId);
+      render();
+    });
+  });
+
+  const billingForm = root.querySelector('[data-form="billing"]');
+  if (billingForm) {
+    billingForm.elements.customer_name?.addEventListener('input', (event) => {
+      state.billingCustomer.name = event.target.value;
+      const customer = root.querySelector('[data-bill-customer]');
+      if (customer) customer.textContent = event.target.value || 'Customer details';
+    });
+    billingForm.elements.customer_contact?.addEventListener('input', (event) => {
+      state.billingCustomer.contact = event.target.value;
+      const contact = root.querySelector('[data-bill-contact]');
+      if (contact) contact.textContent = event.target.value || 'Add a name and contact';
+    });
+  }
 
   root.querySelectorAll('form').forEach((form) => {
     form.addEventListener('submit', handleSubmit);
@@ -195,8 +251,97 @@ function bindEvents() {
   }
 }
 
+function addBillingItem(productValue, quantityValue) {
+  const product = state.products.find((item) => item.id === Number(productValue) || item.name.toLowerCase() === String(productValue || '').trim().toLowerCase());
+  if (!product) return;
+
+  const quantity = Math.max(1, Math.min(Number(quantityValue) || 1, Number(product.quantity)));
+  state.billing[product.id] = quantity;
+  state.billingOrder = [product.id, ...state.billingOrder.filter((id) => id !== product.id)];
+  render();
+}
+
+function selectBillingProduct(productValue) {
+  const product = state.products.find((item) => item.id === Number(productValue) || item.name.toLowerCase() === String(productValue || '').trim().toLowerCase());
+  const productEntry = root.querySelector('[data-billing-product-entry]');
+  const quantityEntry = root.querySelector('[data-billing-entry-quantity]');
+  if (!product || !productEntry) return;
+
+  productEntry.value = product.name;
+  productEntry.setAttribute('aria-expanded', 'false');
+  const suggestions = root.querySelector('[data-billing-suggestions]');
+  if (suggestions) suggestions.hidden = true;
+  quantityEntry?.focus();
+}
+
+function renderBillingSuggestions(query = '') {
+  const suggestions = root.querySelector('[data-billing-suggestions]');
+  const productEntry = root.querySelector('[data-billing-product-entry]');
+  if (!suggestions || !productEntry) return;
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const matches = state.products
+    .filter((product) => product.name.toLowerCase().includes(normalizedQuery))
+    .slice(0, 8);
+  suggestions.innerHTML = matches.length
+    ? matches.map((product) => `<button type="button" class="billing-suggestion" data-billing-suggestion="${escapeHtml(product.name)}"><span><strong>${escapeHtml(product.name)}</strong><small>${money(product.price)} · ${product.quantity} ${escapeHtml(product.unit)} available</small></span><span class="suggestion-arrow">Enter</span></button>`).join('')
+    : '<p class="billing-suggestions-empty">No matching products</p>';
+  suggestions.hidden = false;
+  productEntry.setAttribute('aria-expanded', 'true');
+
+  suggestions.querySelectorAll('[data-billing-suggestion]').forEach((suggestion) => {
+    suggestion.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      productEntry.value = suggestion.dataset.billingSuggestion;
+      selectBillingProduct(productEntry.value);
+    });
+  });
+}
+
+function updateBillingSummary(productId) {
+  const product = state.products.find((item) => item.id === Number(productId));
+  if (!product) return;
+
+  const quantityInput = root.querySelector(`[data-billing-quantity="${productId}"]`);
+  const quantity = Math.max(1, Math.min(Number(quantityInput?.value) || 1, Number(product.quantity)));
+  state.billing[productId] = quantity;
+
+  const quantityElement = root.querySelector(`[data-billing-row-quantity="${productId}"]`);
+  const amountElement = root.querySelector(`[data-billing-amount="${productId}"]`);
+  if (quantityElement) quantityElement.textContent = quantity;
+  if (amountElement) amountElement.textContent = money(product.price * quantity);
+
+  const total = Object.entries(state.billing).reduce((sum, [id, value]) => {
+    const item = state.products.find((productRecord) => productRecord.id === Number(id));
+    return sum + (item ? item.price * Number(value) : 0);
+  }, 0);
+  const totalElement = root.querySelector('[data-billing-total]');
+  if (totalElement) totalElement.textContent = money(total);
+  renderPaymentQr();
+}
+
+async function renderPaymentQr() {
+  const qrElement = root.querySelector('[data-payment-qr]');
+  if (!qrElement) return;
+
+  const total = Object.entries(state.billing).reduce((sum, [id, value]) => {
+    const product = state.products.find((item) => item.id === Number(id));
+    return sum + (product ? product.price * Number(value) : 0);
+  }, 0);
+  const paymentId = import.meta.env.VITE_UPI_ID || 'grocery@upi';
+  const paymentUrl = `upi://pay?pa=${encodeURIComponent(paymentId)}&pn=Grocerly%20Market&am=${total.toFixed(2)}&cu=INR&tn=Invoice%20Draft`;
+
+  try {
+    qrElement.src = await QRCode.toDataURL(paymentUrl, { width: 128, margin: 1, errorCorrectionLevel: 'M' });
+    qrElement.alt = `Payment QR for ${money(total)}`;
+  } catch {
+    qrElement.removeAttribute('src');
+  }
+}
+
 function handleAction(action) {
   if (action === 'logout') logout();
+  else if (action === 'print-bill') window.print();
   else if (action === 'close-modal') {
     state.modal = null;
     render();
@@ -227,6 +372,7 @@ function handleAction(action) {
 async function handleSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
+  const printAfterCreate = event.submitter?.dataset.submitAction === 'create-print';
   const data = Object.fromEntries(new FormData(form));
   const message = form.querySelector('[data-message]');
 
@@ -261,13 +407,18 @@ async function handleSubmit(event) {
       const result = await apiJson('/sales', {
         method: 'POST',
         body: JSON.stringify({
+          customer_name: data.customer_name,
+          customer_contact: data.customer_contact,
           items: Object.entries(state.billing).map(([product_id, quantity]) => ({
             product_id: Number(product_id),
             quantity: Number(quantity),
           })),
         }),
       });
+      if (printAfterCreate) window.print();
       state.billing = {};
+      state.billingOrder = [];
+      state.billingCustomer = { name: '', contact: '' };
       if (message) message.textContent = `Invoice ${result.id} created for ${money(result.total)}`;
       await loadData();
     } else if (form.dataset.form === 'supplier') {

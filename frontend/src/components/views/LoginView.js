@@ -15,7 +15,10 @@ export function renderLogin(state, helpers) {
           </label>
           <label>
             Password
-            <input name="password" required type="password" autocomplete="current-password" placeholder="Enter your password" />
+            <span class="password-field">
+              <input name="password" required type="password" autocomplete="current-password" placeholder="Enter your password" />
+              <button type="button" class="password-toggle" data-action="toggle-password" aria-label="Show password">Show</button>
+            </span>
           </label>
           <label class="remember-option">
             <input name="remember" type="checkbox" />

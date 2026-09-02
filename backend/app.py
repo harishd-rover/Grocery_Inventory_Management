@@ -53,7 +53,7 @@ def purchase_row(row):
 
 
 def sale_row(row):
-    return {"id": row["reference"], "items": row["items"], "products": row["products"], "total": float(row["total"]), "date": row["sale_date"].isoformat(), "date_added": row["date_added"].isoformat()}
+    return {"id": row["reference"], "customer_name": row["customer_name"], "customer_contact": row["customer_contact"], "items": row["items"], "products": row["products"], "total": float(row["total"]), "date": row["sale_date"].isoformat(), "date_added": row["date_added"].isoformat()}
 
 
 @app.post("/api/auth/login")
@@ -187,7 +187,7 @@ def summary():
 @require_auth()
 def get_products():
     with connection() as (_, cursor):
-        cursor.execute("SELECT p.*, s.name AS supplier FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id ORDER BY p.date_added DESC, p.id DESC")
+        cursor.execute("SELECT p.*, c.name AS category, s.name AS supplier FROM products p JOIN categories c ON p.category_id = c.id LEFT JOIN suppliers s ON p.supplier_id = s.id ORDER BY p.date_added DESC, p.id DESC")
         return jsonify([product_row(row) for row in cursor.fetchall()])
 
 
@@ -217,7 +217,7 @@ def add_product():
         product_id = cursor.fetchone()["id"]
         sku = f"PRD-{1000 + product_id}"
         cursor.execute("INSERT INTO products (sku, name, category_id, price, quantity, reorder_level, unit, supplier_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (sku, payload["name"], category_id, payload["price"], payload["quantity"], payload.get("reorder_level", 10), payload["unit"], supplier_id))
-        cursor.execute("SELECT p.*, s.name AS supplier FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE p.id = %s", (cursor.lastrowid,))
+        cursor.execute("SELECT p.*, c.name AS category, s.name AS supplier FROM products p JOIN categories c ON p.category_id = c.id LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE p.id = %s", (cursor.lastrowid,))
         return jsonify(product_row(cursor.fetchone())), 201
 
 
@@ -232,7 +232,7 @@ def update_product(product_id):
         cursor.execute(f"UPDATE products SET {', '.join(f'{key} = %s' for key in allowed)} WHERE id = %s", [*allowed.values(), product_id])
         if cursor.rowcount == 0:
             return jsonify({"error": "Product not found"}), 404
-        cursor.execute("SELECT p.*, s.name AS supplier FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE p.id = %s", (product_id,))
+        cursor.execute("SELECT p.*, c.name AS category, s.name AS supplier FROM products p JOIN categories c ON p.category_id = c.id LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE p.id = %s", (product_id,))
         return jsonify(product_row(cursor.fetchone()))
 
 
@@ -328,7 +328,11 @@ def get_sales():
 @require_auth({"admin", "staff"})
 def create_sale():
     payload = request.get_json() or {}
+    customer_name = str(payload.get("customer_name") or "").strip()
+    customer_contact = str(payload.get("customer_contact") or "").strip()
     items = payload.get("items") or ([{"product_id": payload.get("product_id"), "quantity": payload.get("quantity", 1)}] if payload.get("product_id") else [])
+    if not customer_name or not customer_contact:
+        return jsonify({"error": "Customer name and contact are required"}), 400
     if not items:
         return jsonify({"error": "At least one product item is required"}), 400
     with connection() as (_, cursor):
@@ -344,12 +348,12 @@ def create_sale():
             total += float(product["price"]) * quantity
         cursor.execute("SELECT COALESCE(MAX(id), 0) + 1 AS id FROM sales")
         reference = f"INV-{1000 + cursor.fetchone()['id']}"
-        cursor.execute("INSERT INTO sales (reference, total, sale_date) VALUES (%s, %s, %s)", (reference, total, date.today()))
+        cursor.execute("INSERT INTO sales (reference, customer_name, customer_contact, total, sale_date) VALUES (%s, %s, %s, %s, %s)", (reference, customer_name, customer_contact, total, date.today()))
         sale_id = cursor.lastrowid
         for product, quantity in validated:
             cursor.execute("INSERT INTO sale_items (sale_id, product_id, quantity, unit_price) VALUES (%s, %s, %s, %s)", (sale_id, product["id"], quantity, product["price"]))
             cursor.execute("UPDATE products SET quantity = quantity - %s WHERE id = %s", (quantity, product["id"]))
-        return jsonify({"id": reference, "items": sum(quantity for _, quantity in validated), "total": round(total, 2), "date": date.today().isoformat()}), 201
+        return jsonify({"id": reference, "customer_name": customer_name, "customer_contact": customer_contact, "items": sum(quantity for _, quantity in validated), "total": round(total, 2), "date": date.today().isoformat()}), 201
 
 
 @app.get("/api/categories")
