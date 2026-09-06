@@ -2,6 +2,16 @@
 
 A JavaScript, Flask, and MySQL inventory workspace for managing grocery items, suppliers, stock, purchases, billing, and reports.
 
+## Current status
+
+The workspace currently contains a working full-stack prototype:
+
+- The Flask backend exposes MySQL-backed REST endpoints for authentication, users, products, suppliers, purchases, sales, categories, and dashboard summaries.
+- The Vite frontend provides login, role-aware navigation, inventory and supplier directories, purchasing, billing, reports, account settings, and administrator user management.
+- Database schema and demo data are available in `database/schema.sql` and `database/seed.sql`.
+- Authentication tokens are stored in backend process memory and are cleared when the backend restarts. Persistent user and inventory data is stored in MySQL.
+- Automated tests are not currently included; verification is done through the local API and frontend workflows.
+
 ## Requirements
 
 - Python 3.9 or newer with `pip` for the Flask backend
@@ -67,10 +77,9 @@ The expected response is:
 
 ### 2. Create and seed the MySQL database
 
-Connect to MySQL as `root` with password `admin123`, then run the SQL files in this order from a MySQL client such as MySQL Workbench:
+Connect to MySQL with an account that can create the application database, then run the SQL files in this order from a MySQL client such as MySQL Workbench:
 
 ```sql
-SOURCE database/create_database.sql;
 SOURCE database/schema.sql;
 SOURCE database/seed.sql;
 ```
@@ -80,10 +89,10 @@ The scripts create the `grocery_inventory_v1` database, create all required tabl
 
 | Setting | Value |
 | --- | --- |
-| Host | `127.0.0.1` |
+| Host | `localhost` |
 | Port | `3306` |
-| User | `root` |
-| Password | `admin123` |
+| User | `grocery_admin` |
+| Password | `Admin123` |
 | Database | `grocery_inventory_v1` |
 
 ### 3. Start the frontend
