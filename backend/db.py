@@ -11,10 +11,10 @@ load_dotenv(Path(__file__).with_name(".env"))
 
 def _config():
     return {
-        "host": os.getenv("MYSQL_HOST", "127.0.0.1"),
+        "host": os.getenv("MYSQL_HOST", "localhost"),
         "port": int(os.getenv("MYSQL_PORT", "3306")),
-        "user": os.getenv("MYSQL_USER", "root"),
-        "password": os.getenv("MYSQL_PASSWORD", "admin123"),
+        "user": os.getenv("MYSQL_USER", "grocery_admin"),
+        "password": os.getenv("MYSQL_PASSWORD", "Admin123"),
         "database": os.getenv("MYSQL_DATABASE", "grocery_inventory_v1"),
     }
 
@@ -25,7 +25,7 @@ _pool = None
 def get_pool():
     global _pool
     if _pool is None:
-        pool_size = int(os.getenv("MYSQL_POOL_SIZE", "10"))
+        pool_size = int(os.getenv("MYSQL_POOL_SIZE", "20"))
         _pool = pooling.MySQLConnectionPool(pool_name="grocery_pool", pool_size=pool_size, **_config())
     return _pool
 

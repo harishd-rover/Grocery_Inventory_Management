@@ -1,16 +1,5 @@
 USE grocery_inventory_v1;
 
-SET FOREIGN_KEY_CHECKS = 0;
-TRUNCATE TABLE sale_items;
-TRUNCATE TABLE sales;
-TRUNCATE TABLE purchase_items;
-TRUNCATE TABLE purchases;
-TRUNCATE TABLE supplier_products;
-TRUNCATE TABLE products;
-TRUNCATE TABLE suppliers;
-TRUNCATE TABLE categories;
-TRUNCATE TABLE users;
-SET FOREIGN_KEY_CHECKS = 1;
 
 INSERT INTO categories (name) VALUES ('Produce');
 

@@ -46,8 +46,6 @@ cd backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-$env:MYSQL_PASSWORD = "admin123"
-$env:MYSQL_POOL_SIZE = "10"
 python app.py
 ```
 
