@@ -78,7 +78,7 @@ SOURCE database/seed.sql;
 ```
 
 
-The scripts create the `grocery_inventory` database, create all required tables, and insert initial demo data. The backend defaults to these local MySQL settings:
+The scripts create the `grocery_inventory_v1` database, create all required tables, and insert initial demo data. The backend defaults to these local MySQL settings:
 
 | Setting | Value |
 | --- | --- |
@@ -86,7 +86,7 @@ The scripts create the `grocery_inventory` database, create all required tables,
 | Port | `3306` |
 | User | `root` |
 | Password | `admin123` |
-| Database | `grocery_inventory` |
+| Database | `grocery_inventory_v1` |
 
 ### 3. Start the frontend
 

@@ -1,4 +1,4 @@
-USE grocery_inventory;
+USE grocery_inventory_v1;
 
 SET FOREIGN_KEY_CHECKS = 0;
 TRUNCATE TABLE sale_items;

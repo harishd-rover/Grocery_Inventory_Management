@@ -1,5 +1,17 @@
-CREATE DATABASE IF NOT EXISTS grocery_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE grocery_inventory;
+CREATE DATABASE IF NOT EXISTS grocery_inventory_v1 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE grocery_inventory_v1;
+
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS sale_items;
+DROP TABLE IF EXISTS sales;
+DROP TABLE IF EXISTS purchase_items;
+DROP TABLE IF EXISTS purchases;
+DROP TABLE IF EXISTS supplier_products;
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS suppliers;
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS users;
+SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -8,12 +20,12 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('admin', 'staff') NOT NULL DEFAULT 'staff',
     date_added DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS categories (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(80) NOT NULL UNIQUE
-);
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS suppliers (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -21,7 +33,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     contact VARCHAR(80) NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'Active',
     date_added DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS products (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -36,7 +48,7 @@ CREATE TABLE IF NOT EXISTS products (
     date_added DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES categories(id),
     CONSTRAINT fk_products_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
-);
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS supplier_products (
     supplier_id INT UNSIGNED NOT NULL,
@@ -46,7 +58,7 @@ CREATE TABLE IF NOT EXISTS supplier_products (
     PRIMARY KEY (supplier_id, product_id),
     CONSTRAINT fk_supplier_products_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
     CONSTRAINT fk_supplier_products_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-);
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS purchases (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -57,7 +69,7 @@ CREATE TABLE IF NOT EXISTS purchases (
     status VARCHAR(30) NOT NULL DEFAULT 'Received',
     date_added DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_purchases_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
-);
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS purchase_items (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -67,7 +79,7 @@ CREATE TABLE IF NOT EXISTS purchase_items (
     supplier_unit_price DECIMAL(12, 2) NOT NULL,
     CONSTRAINT fk_purchase_items_purchase FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
     CONSTRAINT fk_purchase_items_product FOREIGN KEY (product_id) REFERENCES products(id)
-);
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS sales (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -77,7 +89,7 @@ CREATE TABLE IF NOT EXISTS sales (
     total DECIMAL(12, 2) NOT NULL DEFAULT 0,
     sale_date DATE NOT NULL,
     date_added DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS sale_items (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -87,4 +99,4 @@ CREATE TABLE IF NOT EXISTS sale_items (
     unit_price DECIMAL(12, 2) NOT NULL,
     CONSTRAINT fk_sale_items_sale FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
     CONSTRAINT fk_sale_items_product FOREIGN KEY (product_id) REFERENCES products(id)
-);
+) ENGINE = InnoDB;

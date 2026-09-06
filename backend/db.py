@@ -15,7 +15,7 @@ def _config():
         "port": int(os.getenv("MYSQL_PORT", "3306")),
         "user": os.getenv("MYSQL_USER", "root"),
         "password": os.getenv("MYSQL_PASSWORD", "admin123"),
-        "database": os.getenv("MYSQL_DATABASE", "grocery_inventory"),
+        "database": os.getenv("MYSQL_DATABASE", "grocery_inventory_v1"),
     }
 
 
